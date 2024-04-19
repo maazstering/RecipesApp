@@ -1,108 +1,80 @@
 const Recipe = require('../models/Recipe');
-const Ingredient = require('../models/Ingredient');
+const Ingredient = require('../models/ingredients');
+const multer = require('multer');
+const csv = require('csv-parse');
+const fs = require('fs');
 
-// Controller functions
-exports.getAllRecipes = async (req, res) => {
-  try {
-    const recipes = await Recipe.find();
-    res.json(recipes);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+
+const upload = multer({ dest: 'uploads/' });
+
+module.exports.add_recipe_csv = (req, res) => {
+    const file = req.file.path;
+    const recipes = [];
+
+    fs.createReadStream(file)
+        .pipe(csv.parse({ columns: true, delimiter: ',' }))
+        .on('data', (data) => {
+            recipes.push({
+                name: data.name,
+                description: data.description,
+                ingredients: data.ingredients.split(',').map(id => id.trim())
+            });
+        })
+        .on('end', async () => {
+            try {
+                await Recipe.insertMany(recipes);
+                res.status(201).json({ message: 'Recipes added successfully' });
+            } catch (err) {
+                res.status(400).json({ error: err.message });
+            }
+            fs.unlinkSync(file); 
+        })
+        .on('error', (err) => {
+            res.status(500).json({ error: 'Failed to process file' });
+        });
 };
 
-exports.createRecipe = async (req, res) => {
-  const recipe = new Recipe({
-    title: req.body.title,
-    description: req.body.description,
-    instructions: req.body.instructions,
-    ingredients: req.body.ingredients
-  });
 
-  try {
-    const newRecipe = await recipe.save();
-    res.status(201).json(newRecipe);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
+module.exports.add_ingredient = async (req, res) => {
+    const { name, description } = req.body;
+    try {
+        const ingredient = new Ingredient({ name, description });
+        await ingredient.save();
+        res.status(201).json(ingredient);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
 };
 
-exports.updateRecipe = async (req, res) => {
-  try {
-    const recipe = await Recipe.findById(req.params.id);
-    if (!recipe) {
-      return res.status(404).json({ message: 'Recipe not found' });
+module.exports.add_recipe = async (req, res) => {
+    const { name, description, ingredients } = req.body;
+    try {
+        const recipe = new Recipe({ name, description, ingredients });
+        await recipe.save();
+        res.status(201).json(recipe);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
     }
-
-    // Update recipe fields
-    if (req.body.title != null) {
-      recipe.title = req.body.title;
-    }
-    if (req.body.description != null) {
-      recipe.description = req.body.description;
-    }
-    if (req.body.instructions != null) {
-      recipe.instructions = req.body.instructions;
-    }
-    if (req.body.ingredients != null) {
-      recipe.ingredients = req.body.ingredients;
-    }
-
-    const updatedRecipe = await recipe.save();
-    res.json(updatedRecipe);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
 };
 
-exports.deleteRecipe = async (req, res) => {
-  try {
-    await Recipe.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Recipe deleted successfully' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+module.exports.view_recipes = async (req, res) => {
+    try {
+        const recipes = await Recipe.find().populate('ingredients');
+        res.status(200).json(recipes);
+    } catch (err) {
+        res.status(500).json({ error: 'Error fetching recipes' });
+    }
 };
 
-exports.addIngredient = async (req, res) => {
-  try {
-    const recipe = await Recipe.findById(req.params.id);
-    if (!recipe) {
-      return res.status(404).json({ message: 'Recipe not found' });
+module.exports.view_recipe_details = async (req, res) => {
+    try {
+        const recipe = await Recipe.findById(req.params.id).populate('ingredients');
+        if (!recipe) {
+            res.status(404).json({ error: 'Recipe not found' });
+        } else {
+            res.status(200).json(recipe);
+        }
+    } catch (err) {
+        res.status(500).json({ error: 'Server error' });
     }
-
-    const ingredient = new Ingredient({
-      name: req.body.name,
-      quantity: req.body.quantity
-    });
-
-    const newIngredient = await ingredient.save();
-    recipe.ingredients.push(newIngredient);
-    const updatedRecipe = await recipe.save();
-
-    res.status(201).json(updatedRecipe);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
-  }
-};
-
-exports.removeIngredient = async (req, res) => {
-  try {
-    const recipe = await Recipe.findById(req.params.id);
-    if (!recipe) {
-      return res.status(404).json({ message: 'Recipe not found' });
-    }
-
-    const index = recipe.ingredients.indexOf(req.params.ingredientId);
-    if (index === -1) {
-      return res.status(404).json({ message: 'Ingredient not found in recipe' });
-    }
-
-    recipe.ingredients.splice(index, 1);
-    await recipe.save();
-
-    res.json({ message: 'Ingredient removed from recipe' });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
 };

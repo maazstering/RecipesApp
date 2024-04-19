@@ -9,10 +9,13 @@ const handleErrors = (err) => {
     if(err.message === 'incorrect email'){
         errors.email = 'that email is not registered';
     }
+
     if(err.message === 'incorrect password'){   
         errors.password = 'that password is incorrect';
         password = 'incorrect password';
     }
+
+
     if(err.code === 11000){
         errors.email = 'that email is already registered';
         return errors;
@@ -45,12 +48,12 @@ module.exports.login_get = (req, res) => {
 };
 
 module.exports.signup_post = async (req, res) => {
-    const { email, password, name, age } = req.body; 
+    const { email, password, name, age ,role} = req.body; 
 
     try {
-        const user = await User.create({ email, password, name, age }); 
+        const user = await User.create({ email, password, name, age ,role}); 
         const token = createToken(user._id);
-        res.cookie('jwt', token, { httpOnly: true, maxAge: maxAge * 1000 });
+        res.cookie('jwt', token, { maxAge: maxAge * 1000 });
         res.status(201).json({ user: user._id });
     } catch (err) {
         const errors = handleErrors(err);
@@ -63,10 +66,10 @@ module.exports.login_post = async (req, res) => {
 
     try {
         const user = await User.login(email, password);
-        const token = createToken(user._id);
-        res.cookie('jwt', token, { httpOnly: true, maxAge: maxAge * 1000 });
+        const token = createToken(user._id).toString();
         console.log('User logged in successfully'); // Add this line
-        res.status(200).json({ user: user._id });
+        console.log('Token', token); // Add this line
+        res.cookie('jwt', token, { httpOnly: true, maxAge: maxAge * 1000 }).status(200).json({ user: user._id, token: token });
     } catch (err) {
         const errors = handleErrors(err);
         res.status(400).json({ errors });
@@ -75,7 +78,7 @@ module.exports.login_post = async (req, res) => {
 
 module.exports.logout_get = (req, res) => {
     res.cookie('jwt', '', { maxAge: 1 });
-    res.redirect('/login');
+    // res.redirect('/login');
 };
 
 module.exports.delete_user = async (req, res) => {
